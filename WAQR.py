@@ -10,7 +10,7 @@ import torch.optim as optim
 from DeepQuantile import DQR
 from sklearn.linear_model import LinearRegression
 
-'git on google drive'
+
 
 class WAQR:
     '''
