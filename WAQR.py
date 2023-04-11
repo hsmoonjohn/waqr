@@ -1,4 +1,7 @@
 import numpy as np
+import torch
+import torch.nn as nn
+import torch.optim as optim
 # import os
 # import sys
 # import torch
@@ -54,7 +57,7 @@ class WAQR:
         else:
             raise Exception(weighting + "is currently not available as a weight")
 
-    def fit_ls(self, tau1,  weighting = 'es'):
+    def fit_ls(self, tau1,  weighting = 'es', intercept=False):
         qnet1 = DQR(self.X, self.Y, options=self.opt)
         if weighting == 'es':
             qnet1.fit(tau=tau1)
@@ -62,7 +65,26 @@ class WAQR:
             qnet1.fit(tau=1-tau1)
         qy1 = qnet1.predict(self.X)
         r1 = self.pseudo_outcome(qy1=qy1, tau1=tau1, weighting=weighting)
-        return LinearRegression(fit_intercept=False).fit(self.X, r1)
+        return LinearRegression(fit_intercept=intercept).fit(self.X, r1)
+
+
+class FullyConnectedNN(nn.Module):
+    def __init__(self, input_size, output_size, hidden_sizes):
+        super(FullyConnectedNN, self).__init__()
+        self.layers = nn.ModuleList()
+        layer_sizes = [input_size] + hidden_sizes + [output_size]
+
+        for i in range(len(layer_sizes) - 1):
+            self.layers.append(nn.Linear(layer_sizes[i], layer_sizes[i + 1]))
+
+    def forward(self, x):
+        for i, layer in enumerate(self.layers):
+            x = layer(x)
+            if i < len(self.layers) - 1:
+                x = torch.relu(x)
+        return x
+
+
 
 
 
