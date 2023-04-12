@@ -67,6 +67,36 @@ class WAQR:
         r1 = self.pseudo_outcome(qy1=qy1, tau1=tau1, weighting=weighting)
         return LinearRegression(fit_intercept=intercept).fit(self.X, r1)
 
+    def fit_nl(self, tau1, weighting ='es', hidden_sizes=[128,128], num_epochs=200, loss_function = 'MSE'):
+        qnet1 = DQR(self.X, self.Y, options=self.opt)
+        if weighting == 'es':
+            qnet1.fit(tau=tau1)
+        elif weighting == 'sq':
+            qnet1.fit(tau=1-tau1)
+        qy1 = qnet1.predict(self.X)
+        r1 = self.pseudo_outcome(qy1=qy1, tau1=tau1, weighting=weighting)
+        model=FullyConnectedNN(input_size=self.X.shape[1], output_size=1, hidden_sizes=hidden_sizes)
+        if loss_function == 'MSE':
+            criterion = nn.MSELoss()
+        elif loss_function == 'MAE':
+            criterion = nn.L1Loss()
+        elif loss_function == 'Huber':
+            criterion = nn.SmoothL1Loss()
+        else:
+            raise ValueError("Invalid loss function")
+
+        optimizer = optim.Adam(model.parameters(),lr=self.opt['lr'])
+        for epoch in range(num_epochs):
+            model.train()
+            optimizer.zero_grad()
+            predictions = model(train_x)
+            loss = criterion(predictions, train_y)
+            loss.backward()
+            optimizer.step()
+
+
+
+
 
 class FullyConnectedNN(nn.Module):
     def __init__(self, input_size, output_size, hidden_sizes):
@@ -83,6 +113,7 @@ class FullyConnectedNN(nn.Module):
             if i < len(self.layers) - 1:
                 x = torch.relu(x)
         return x
+
 
 
 
