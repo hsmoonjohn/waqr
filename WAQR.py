@@ -76,8 +76,7 @@ class WAQR:
             qnet1.fit(tau=1-tau1)
         qy1 = qnet1.predict(self.X)
         r1 = self.pseudo_outcome(qy1=qy1, tau1=tau1, weighting=weighting)
-        model = FullyConnectedNN(input_size=self.X.shape[1], output_size=1, hidden_sizes=hidden_sizes,
-                               dropout_rate=dropout_rate)
+
         if loss_function == 'MSE':
             criterion = nn.MSELoss()
         elif loss_function == 'MAE':
@@ -87,10 +86,12 @@ class WAQR:
         else:
             raise ValueError("Invalid loss function")
 
-        train_x = torch.tensor(self.X, dtype=torch.float32).view(-1, 1)
-        train_y = torch.tensor(r1, dtype=torch.float32).view(-1, 1)
+        train_x = torch.tensor(self.X, dtype=torch.float32)
+        train_y = torch.tensor(r1, dtype=torch.float32)
         train_data = TensorDataset(train_x, train_y)
         train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
+        model = FullyConnectedNN(input_size=train_x.shape[1], output_size=1, hidden_sizes=hidden_sizes,
+                                 dropout_rate=dropout_rate)
         epoch = 0
         loss_diff = 1
         optimizer = optim.Adam(model.parameters(), lr=self.opt['lr'])
@@ -102,7 +103,7 @@ class WAQR:
             for batch_x, batch_y in train_loader:
                 optimizer.zero_grad()
                 predictions = model(batch_x)
-                loss = criterion(predictions, batch_y)
+                loss = criterion(predictions, batch_y.view_as(predictions))
                 loss.backward()
                 optimizer.step()
                 train_loss += loss.data
@@ -133,6 +134,14 @@ class FullyConnectedNN(nn.Module):
         for layer in self.layers:
             x = layer(x)
         return x
+
+    def predict(self, X):
+        tX = torch.tensor(X, dtype=torch.float32)
+        self.eval()
+        self.zero_grad()
+        yhat = self.forward(tX)[:, 0]
+        return yhat.data.numpy()
+
 
 
 
