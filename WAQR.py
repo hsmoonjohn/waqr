@@ -68,7 +68,7 @@ class WAQR:
         return LinearRegression(fit_intercept=intercept).fit(self.X, r1)
 
     def fit_nl(self, tau1, weighting ='es', hidden_sizes=[128, 128], num_epochs=200, loss_function='MSE', batch_size=64,
-               use_lr_decay=False, dropout_rate=0.1):
+               use_lr_decay=False, dropout_rate=0.1, lr=0.1):
         qnet1 = DQR(self.X, self.Y, options=self.opt)
         if weighting == 'es':
             qnet1.fit(tau=tau1)
@@ -94,10 +94,11 @@ class WAQR:
                                  dropout_rate=dropout_rate)
         epoch = 0
         loss_diff = 1
-        optimizer = optim.Adam(model.parameters(), lr=self.opt['lr'])
+        optimizer = optim.Adam(model.parameters(), lr=lr)
+        train_losses = []
         if use_lr_decay:
             scheduler = StepLR(optimizer, step_size=100, gamma=0.1)
-        while epoch < num_epochs and loss_diff > self.opt['tol']:
+        while epoch < num_epochs:  # and loss_diff > self.opt['tol']:
             train_loss = torch.Tensor([0])
             model.train()
             for batch_x, batch_y in train_loader:
@@ -106,15 +107,16 @@ class WAQR:
                 loss = criterion(predictions, batch_y.view_as(predictions))
                 loss.backward()
                 optimizer.step()
-                train_loss += loss.data
+                train_loss += loss.item()
+
+            train_losses.append(train_loss / len(train_loader))
             if epoch != 0:
-                loss_diff = np.abs(train_loss.data.numpy() / float(len(train_loader))-prev)
-            prev = train_loss.data.numpy() / float(len(train_loader))
+                loss_diff = np.abs(train_losses[epoch]-train_losses[epoch-1])
             if use_lr_decay:
                 scheduler.step()
             epoch += 1
 
-        return model
+        return model, train_losses
 
 
 
