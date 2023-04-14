@@ -68,7 +68,7 @@ class WAQR:
         return LinearRegression(fit_intercept=intercept).fit(self.X, r1)
 
     def fit_nl(self, tau1, weighting ='es', hidden_sizes=[128, 128], num_epochs=200, loss_function='MSE', batch_size=64,
-               use_lr_decay=False, dropout_rate=0.1, lr=0.1):
+               use_lr_decay=False, dropout_rate=0.1, lr=0.1, activation='ReLU', step_size=100, gamma=0.1, optimiz='Adam'):
         qnet1 = DQR(self.X, self.Y, options=self.opt)
         if weighting == 'es':
             qnet1.fit(tau=tau1)
@@ -91,14 +91,21 @@ class WAQR:
         train_data = TensorDataset(train_x, train_y)
         train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
         model = FullyConnectedNN(input_size=train_x.shape[1], output_size=1, hidden_sizes=hidden_sizes,
-                                 dropout_rate=dropout_rate)
+                                 dropout_rate=dropout_rate, activation=activation)
         epoch = 0
         loss_diff = 1
-        optimizer = optim.Adam(model.parameters(), lr=lr)
+        if optimiz == "SGD":
+            optimizer = optim.SGD(model.parameters(), lr=lr, weight_decay=self.opt['weight_decay'],
+                                  nesterov=self.opt['nesterov'], momentum=self.opt['momentum'])
+        elif optimiz == "Adam":
+            optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=self.opt['weight_decay'])
+        else:
+            raise Exception(options['optimizer'] + "is currently not available")
+
         train_losses = []
         if use_lr_decay:
-            scheduler = StepLR(optimizer, step_size=100, gamma=0.1)
-        while epoch < num_epochs:  # and loss_diff > self.opt['tol']:
+            scheduler = StepLR(optimizer, step_size=step_size, gamma=gamma)
+        while epoch < num_epochs and loss_diff > 1e-4:
             train_loss = torch.Tensor([0])
             model.train()
             for batch_x, batch_y in train_loader:
@@ -108,6 +115,10 @@ class WAQR:
                 loss.backward()
                 optimizer.step()
                 train_loss += loss.item()
+                if np.isnan(loss.data.numpy()):
+                    import warnings
+                    warnings.warn('NaNs encountered in training model.')
+                    break
 
             train_losses.append(train_loss / len(train_loader))
             if epoch != 0:
@@ -121,15 +132,24 @@ class WAQR:
 
 
 class FullyConnectedNN(nn.Module):
-    def __init__(self, input_size, output_size, hidden_sizes, dropout_rate):
+    def __init__(self, input_size, output_size, hidden_sizes, dropout_rate, activation='ReLU'):
         super(FullyConnectedNN, self).__init__()
         self.layers = nn.ModuleList()
         layer_sizes = [input_size] + hidden_sizes + [output_size]
 
+        if activation == "ReLU":
+            self.activation = nn.ReLU
+        elif activation == "tanh":
+            self.activation = nn.Tanh
+        elif activation == "sigmoid":
+            self.activation = nn.Sigmoid
+        else:
+            raise Exception(activation + "is currently not available as a activation function")
+
         for i in range(len(layer_sizes) - 1):
             self.layers.append(nn.Linear(layer_sizes[i], layer_sizes[i + 1]))
             if i < len(layer_sizes) - 2:
-                self.layers.append(nn.ReLU())
+                self.layers.append(self.activation())
                 self.layers.append(nn.Dropout(dropout_rate))
 
     def forward(self, x):
